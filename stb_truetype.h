@@ -1,3 +1,8 @@
+// [DEAR IMGUI]
+// This is a slightly modified version of stb_truetype.h 1.27.
+// Mostly fixing for compiler and static analyzer warnings.
+// Grep for [DEAR IMGUI] to find the changes.
+
 // stb_truetype.h - v1.27 - public domain
 // authored from 2009-2021 by Sean Barrett / RAD Game Tools
 //
