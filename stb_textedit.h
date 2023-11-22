@@ -956,6 +956,11 @@ retry:
             if (find.length == 0)
                break;
 
+            // [DEAR IMGUI]
+            // going down while being on the last line shouldn't bring us to that line end
+            //if (STB_TEXTEDIT_GETCHAR(str, find.first_char + find.length - 1) != STB_TEXTEDIT_NEWLINE)
+            //   break;
+
             // now find character position down a row
             state->cursor = start;
             STB_TEXTEDIT_LAYOUTROW(&row, str, state->cursor);
@@ -1234,7 +1239,14 @@ static void stb_textedit_discard_redo(StbUndoState *state)
                state->undo_rec[i].char_storage += n;
       }
       // now move all the redo records towards the end of the buffer; the first one is at 'redo_point'
-      STB_TEXTEDIT_memmove(state->undo_rec + state->redo_point+1, state->undo_rec + state->redo_point, (size_t) ((STB_TEXTEDIT_UNDOSTATECOUNT - state->redo_point - 1)*sizeof(state->undo_rec[0])));
+      // [DEAR IMGUI]
+      size_t move_size = (size_t)((STB_TEXTEDIT_UNDOSTATECOUNT - state->redo_point - 1) * sizeof(state->undo_rec[0]));
+      const char* buf_begin = (char*)state->undo_rec; (void)buf_begin;
+      const char* buf_end   = (char*)state->undo_rec + sizeof(state->undo_rec); (void)buf_end;
+      IM_ASSERT(((char*)(state->undo_rec + state->redo_point)) >= buf_begin);
+      IM_ASSERT(((char*)(state->undo_rec + state->redo_point + 1) + move_size) <= buf_end);
+      STB_TEXTEDIT_memmove(state->undo_rec + state->redo_point+1, state->undo_rec + state->redo_point, move_size);
+
       // now move redo_point to point to the new one
       ++state->redo_point;
    }
