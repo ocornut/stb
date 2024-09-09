@@ -310,7 +310,7 @@ typedef struct
    int undo_char_point, redo_char_point;
 } StbUndoState;
 
-typedef struct
+typedef struct STB_TexteditState
 {
    /////////////////////
    //
