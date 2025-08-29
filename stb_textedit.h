@@ -417,7 +417,7 @@ typedef struct
 //
 
 // traverse the layout to locate the nearest character to a display position
-static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y)
+static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y, int* out_side_on_line)
 {
    StbTexteditRow r;
    int n = STB_TEXTEDIT_STRINGLEN(str);
@@ -427,6 +427,7 @@ static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y)
    r.x0 = r.x1 = 0;
    r.ymin = r.ymax = 0;
    r.num_chars = 0;
+   *out_side_on_line = 0;
 
    // search rows to find one that straddles 'y'
    while (i < n) {
@@ -446,7 +447,10 @@ static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y)
 
    // below all text, return 'after' last character
    if (i >= n)
+   {
+      *out_side_on_line = 1;
       return n;
+   }
 
    // check if it's before the beginning of the line
    if (x < r.x0)
@@ -459,6 +463,7 @@ static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y)
       for (k=0; k < r.num_chars; k = STB_TEXTEDIT_GETNEXTCHARINDEX(str, i + k) - i) {
          float w = STB_TEXTEDIT_GETWIDTH(str, i, k);
          if (x < prev_x+w) {
+            *out_side_on_line = (k == 0) ? 0 : 1;
             if (x < prev_x+w/2)
                return k+i;
             else
@@ -470,6 +475,7 @@ static int stb_text_locate_coord(STB_TEXTEDIT_STRING *str, float x, float y)
    }
 
    // if the last character is a newline, return that. otherwise return 'after' the last character
+   *out_side_on_line = 1;
    if (STB_TEXTEDIT_GETCHAR(str, i+r.num_chars-1) == STB_TEXTEDIT_NEWLINE)
       return i+r.num_chars-1;
    else
@@ -481,6 +487,7 @@ static void stb_textedit_click(STB_TEXTEDIT_STRING *str, STB_TexteditState *stat
 {
    // In single-line mode, just always make y = 0. This lets the drag keep working if the mouse
    // goes off the top or bottom of the text
+   int side_on_line;
    if( state->single_line )
    {
       StbTexteditRow r;
@@ -488,16 +495,18 @@ static void stb_textedit_click(STB_TEXTEDIT_STRING *str, STB_TexteditState *stat
       y = r.ymin;
    }
 
-   state->cursor = stb_text_locate_coord(str, x, y);
+   state->cursor = stb_text_locate_coord(str, x, y, &side_on_line);
    state->select_start = state->cursor;
    state->select_end = state->cursor;
    state->has_preferred_x = 0;
+   str->LastMoveDirectionLR = (ImS8)(side_on_line ? ImGuiDir_Right : ImGuiDir_Left);
 }
 
 // API drag: on mouse drag, move the cursor and selection endpoint to the clicked location
 static void stb_textedit_drag(STB_TEXTEDIT_STRING *str, STB_TexteditState *state, float x, float y)
 {
    int p = 0;
+   int side_on_line;
 
    // In single-line mode, just always make y = 0. This lets the drag keep working if the mouse
    // goes off the top or bottom of the text
@@ -511,8 +520,9 @@ static void stb_textedit_drag(STB_TEXTEDIT_STRING *str, STB_TexteditState *state
    if (state->select_start == state->select_end)
       state->select_start = state->cursor;
 
-   p = stb_text_locate_coord(str, x, y);
+   p = stb_text_locate_coord(str, x, y, &side_on_line);
    state->cursor = state->select_end = p;
+   str->LastMoveDirectionLR = (ImS8)(side_on_line ? ImGuiDir_Right : ImGuiDir_Left);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -561,6 +571,8 @@ static void stb_textedit_find_charpos(StbFindState *find, STB_TEXTEDIT_STRING *s
    for(;;) {
       STB_TEXTEDIT_LAYOUTROW(&r, str, i);
       if (n < i + r.num_chars)
+         break;
+      if (str->LastMoveDirectionLR == ImGuiDir_Right && str->Stb->cursor > 0 && str->Stb->cursor == i + r.num_chars && STB_TEXTEDIT_GETCHAR(str, i + r.num_chars - 1) != STB_TEXTEDIT_NEWLINE) // [DEAR IMGUI] Wrapping point handling
          break;
       if (i + r.num_chars == z && z > 0 && STB_TEXTEDIT_GETCHAR(str, z - 1) != STB_TEXTEDIT_NEWLINE)  // [DEAR IMGUI] special handling for last line
          break;   // [DEAR IMGUI]
@@ -957,6 +969,8 @@ retry:
             }
             stb_textedit_clamp(str, state);
 
+            if (state->cursor == find.first_char + find.length)
+               str->LastMoveDirectionLR = ImGuiDir_Left;
             state->has_preferred_x = 1;
             state->preferred_x = goal_x;
 
@@ -1021,6 +1035,10 @@ retry:
             }
             stb_textedit_clamp(str, state);
 
+            if (state->cursor == find.first_char)
+               str->LastMoveDirectionLR = ImGuiDir_Right;
+            else if (state->cursor == find.prev_first)
+               str->LastMoveDirectionLR = ImGuiDir_Left;
             state->has_preferred_x = 1;
             state->preferred_x = goal_x;
 
