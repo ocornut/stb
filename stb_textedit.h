@@ -29,6 +29,7 @@
 //
 // VERSION HISTORY
 //
+//   x.xx (2026-11-12) changed STB_TEXTEDIT_INSERTCHARS() to return inserted count (instead of 0/1 bool), allowing partial insertion.
 //   1.16 (2026-11-12) add stb_textedit_text(), STB_TEXTEDIT_GETPREVCHARINDEX(), STB_TEXTEDIT_GETNEXTCHARINDEX() to facilitate UTF-8 support while preserving byte indices.
 //   1.15 (2026-11-08) various fixes
 //   1.14 (2021-07-11) page up/down, various fixes
@@ -139,7 +140,8 @@
 //                                        as manually wordwrapping for end-of-line positioning
 //
 //    STB_TEXTEDIT_DELETECHARS(obj,i,n)      delete n characters starting at i
-//    STB_TEXTEDIT_INSERTCHARS(obj,i,c*,n)   insert n characters at i (pointed to by STB_TEXTEDIT_CHARTYPE*)
+//    STB_TEXTEDIT_INSERTCHARS(obj,i,c*,n)   try to insert n characters at i (pointed to by STB_TEXTEDIT_CHARTYPE*)
+//                                           returns number of characters actually inserted. [DEAR IMGUI]
 //
 //    STB_TEXTEDIT_K_SHIFT       a power of two that is or'd in to a keyboard input to represent the shift key
 //
@@ -761,7 +763,8 @@ static int stb_textedit_paste_internal(STB_TEXTEDIT_STRING *str, STB_TexteditSta
    stb_textedit_clamp(str, state);
    stb_textedit_delete_selection(str,state);
    // try to insert the characters
-   if (STB_TEXTEDIT_INSERTCHARS(str, state->cursor, text, len)) {
+   len = STB_TEXTEDIT_INSERTCHARS(str, state->cursor, text, len);
+   if (len) {
       stb_text_makeundo_insert(state, state->cursor, len);
       state->cursor += len;
       state->has_preferred_x = 0;
@@ -781,13 +784,15 @@ static void stb_textedit_text(STB_TEXTEDIT_STRING* str, STB_TexteditState* state
    if (state->insert_mode && !STB_TEXT_HAS_SELECTION(state) && state->cursor < STB_TEXTEDIT_STRINGLEN(str)) {
       stb_text_makeundo_replace(str, state, state->cursor, 1, 1);
       STB_TEXTEDIT_DELETECHARS(str, state->cursor, 1);
-      if (STB_TEXTEDIT_INSERTCHARS(str, state->cursor, (STB_TEXTEDIT_CHARTYPE*) text, text_len)) {
+      text_len = STB_TEXTEDIT_INSERTCHARS(str, state->cursor, (STB_TEXTEDIT_CHARTYPE*) text, text_len);
+      if (text_len) {
          state->cursor += text_len;
          state->has_preferred_x = 0;
       }
    } else {
       stb_textedit_delete_selection(str, state); // implicitly clamps
-      if (STB_TEXTEDIT_INSERTCHARS(str, state->cursor, (STB_TEXTEDIT_CHARTYPE*) text, text_len)) {
+      text_len = STB_TEXTEDIT_INSERTCHARS(str, state->cursor, (STB_TEXTEDIT_CHARTYPE*) text, text_len);
+      if (text_len) {
          stb_text_makeundo_insert(state, state->cursor, text_len);
          state->cursor += text_len;
          state->has_preferred_x = 0;
@@ -1337,7 +1342,7 @@ static void stb_text_undo(STB_TEXTEDIT_STRING *str, STB_TexteditState *state)
    // check type of recorded action:
    if (u.insert_length) {
       // easy case: was a deletion, so we need to insert n characters
-      STB_TEXTEDIT_INSERTCHARS(str, u.where, &s->undo_char[u.char_storage], u.insert_length);
+      u.insert_length = STB_TEXTEDIT_INSERTCHARS(str, u.where, &s->undo_char[u.char_storage], u.insert_length);
       s->undo_char_point -= u.insert_length;
    }
 
@@ -1389,7 +1394,7 @@ static void stb_text_redo(STB_TEXTEDIT_STRING *str, STB_TexteditState *state)
 
    if (r.insert_length) {
       // easy case: need to insert n characters
-      STB_TEXTEDIT_INSERTCHARS(str, r.where, &s->undo_char[r.char_storage], r.insert_length);
+      r.insert_length = STB_TEXTEDIT_INSERTCHARS(str, r.where, &s->undo_char[r.char_storage], r.insert_length);
       s->redo_char_point += r.insert_length;
    }
 
